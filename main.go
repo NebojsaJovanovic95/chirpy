@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"fmt"
+	"strings"
 	"net/http"
 	"encoding/json"
 	"sync/atomic"
@@ -99,8 +100,25 @@ func main() {
 			return
 		}
 
-		respondWithJSON(w, http.StatusOK, map[string]bool{
-			"valid": true,
+		// profanity filtering
+		words := strings.Split(req.Body, " ")
+		profanity := map[string]bool{
+			"kerfuffle": true,
+			"sharbert":  true,
+			"fornax":    true,
+		}
+
+		for i, word := range words {
+			lowered := strings.ToLower(word)
+			if profanity[lowered] {
+				words[i] = "****"
+			}
+		}
+
+		cleaned := strings.Join(words, " ")
+
+		respondWithJSON(w, http.StatusOK, map[string]string{
+			"cleaned_body": cleaned,
 		})
 	})
 	
