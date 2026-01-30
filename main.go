@@ -21,17 +21,28 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 func main() {
 	cfg := &apiConfig{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"OK"}`))
 	})
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
+	mux.HandleFunc("GET /admin/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "Hits: %d", cfg.fileserverHits.Load())
+		fmt.Fprintf(w, `
+<html>
+	<body>
+		<h1>
+			Welcome, Chirpy Admin
+		</h1>
+		<p>
+			Chirpy has been visited %d times!
+		</p>
+	</body>
+</html>
+`, cfg.fileserverHits.Load())
 	})
-	mux.HandleFunc("POST /reset", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /admin/reset", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		cfg.fileserverHits.Store(0)
