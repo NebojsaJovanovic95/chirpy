@@ -17,6 +17,8 @@ import (
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	db             *database.Queries
+	platform       string
 }
 
 type validateChirpRequest struct {
@@ -68,15 +70,53 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	
+	cfg := &apiConfig{
+		db:       dbQueries,
+		platform: os.Getenv("PLATFORM"),
+	}
 
-	cfg := &apiConfig{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/users", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		defer r.Body.Close()
+		var req struct {
+			Email string `json:"email"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondWithError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		user, err := cfg.db.CreateUser(r.Context(), req.Email)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "failed to create user")
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		respondWithJSON(w, http.StatusCreated, map[string]interface{}{
+			"id":         user.ID,
+			"email":      user.Email,
+			"created_at": user.CreatedAt,
+			"updated_at": user.UpdatedAt,
+		})
+	})
+	mux.HandleFunc("/api/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"OK"}`))
 	})
-	mux.HandleFunc("GET /admin/metrics", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/admin/metrics", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `
@@ -93,7 +133,14 @@ func main() {
 `, cfg.fileserverHits.Load())
 	})
 	mux.HandleFunc("POST /admin/reset", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
+		if cfg.platform != "dev" {
+			respondWithError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		if err := cfg.db.DeleteAllUsers(r.Context()); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "failed to delete users")
+		}
+		cfg.fileserverHits.Store(0)
 		w.WriteHeader(http.StatusOK)
 		cfg.fileserverHits.Store(0)
 	})
