@@ -1,13 +1,18 @@
 package main
 
 import (
+	"os"
+	"context"
+	"database/sql"
 	"log"
 	"fmt"
 	"strings"
 	"net/http"
 	"encoding/json"
 	"sync/atomic"
-	"github.com/lib/pq"
+	"github.com/joho/godotenv"
+	"github.com/NebojsaJovanovic95/chirpy/internal/database"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
@@ -45,8 +50,25 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 }
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Fatal(err)
+	}
+
 	dbURL := os.Getenv("DB_URL")
 	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	dbQueries := database.New(db)
+
+	// create a user
+	_, err = dbQueries.CreateUser(context.Background(), "test@example.com")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	cfg := &apiConfig{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, r *http.Request) {
