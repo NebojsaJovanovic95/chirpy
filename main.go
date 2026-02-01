@@ -77,12 +77,15 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	
 	mux.HandleFunc("/api/users", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+
 		defer r.Body.Close()
+
 		var req struct {
 			Email string `json:"email"`
 		}
@@ -90,11 +93,14 @@ func main() {
 			respondWithError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
+
 		user, err := cfg.db.CreateUser(r.Context(), req.Email)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "failed to create user")
 			return
 		}
+
+		// Must return 201 Created
 		w.WriteHeader(http.StatusCreated)
 		respondWithJSON(w, http.StatusCreated, map[string]interface{}{
 			"id":         user.ID,
@@ -102,6 +108,52 @@ func main() {
 			"created_at": user.CreatedAt,
 			"updated_at": user.UpdatedAt,
 		})
+	})
+	mux.HandleFunc("/api/chirps", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http. StatusMethodNotAllowed)
+			return
+		}
+		defer r.Body.Close()
+
+		var req struct {
+			Body string `json:"body"`
+			UserID string `json:"user_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondWithError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		if len(req.Body) > 140 {
+			respondWithError(w, http.StatusBadRequest, "chirp is too long")
+			return
+		}
+		words := strings.Split(req.Body, " ")
+		profanity := map[string]bool {
+			"kerfuffle": true,
+			"sharbert": true,
+			"fornax": true,
+		}
+		for i, word := range words {
+			if profanity[strings.ToLower(word)] {
+				words[i] = "****"
+			}
+		}
+		cleaned := strings.Join(words, " ")
+
+		chirp, err := cfg.db.CreateChirp(
+			r.Context();
+			database.CreateChirpParams{
+				Body: cleaned,
+				UserID: req.UserID,
+			},
+		)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "failed to create chirp")
+			return
+		}
+
+		respondWithJSON(w, http.StatusCreated, chirp)
 	})
 	mux.HandleFunc("/api/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -153,47 +205,6 @@ func main() {
 		Handler: mux,
 	}
 
-	mux.HandleFunc("/api/validate_chirp", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		defer r.Body.Close()
-
-		var req validateChirpRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid JSON")
-			return
-		}
-
-		if len(req.Body) > 140 {
-			respondWithError(w, http.StatusBadRequest, "Chirp is too long")
-			return
-		}
-
-		// profanity filtering
-		words := strings.Split(req.Body, " ")
-		profanity := map[string]bool{
-			"kerfuffle": true,
-			"sharbert":  true,
-			"fornax":    true,
-		}
-
-		for i, word := range words {
-			lowered := strings.ToLower(word)
-			if profanity[lowered] {
-				words[i] = "****"
-			}
-		}
-
-		cleaned := strings.Join(words, " ")
-
-		respondWithJSON(w, http.StatusOK, map[string]string{
-			"cleaned_body": cleaned,
-		})
-	})
-	
 	log.Println("Listening on http://localhost", server.Addr)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
