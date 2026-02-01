@@ -142,7 +142,7 @@ func main() {
 		cleaned := strings.Join(words, " ")
 
 		chirp, err := cfg.db.CreateChirp(
-			r.Context();
+			r.Context(),
 			database.CreateChirpParams{
 				Body: cleaned,
 				UserID: req.UserID,
