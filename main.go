@@ -194,7 +194,6 @@ func main() {
 		}
 		cfg.fileserverHits.Store(0)
 		w.WriteHeader(http.StatusOK)
-		cfg.fileserverHits.Store(0)
 	})
 	fileServer := cfg.middlewareMetricsInc(
 		http.FileServer(http.Dir(".")),
