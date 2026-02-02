@@ -143,12 +143,19 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	refreshToken, err := auth.MakeRefreshToken()
-
-	_, err = cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to create refresh token")
+		return
+	}
+	err = cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
 		Token:		refreshToken,
-		UserID:		user.ID,
+		UserID:		uuid.NullUUID{UUID: user.ID, Valid: true},
 		ExpiresAt:	time.Now().Add(60 * 24 * time.Hour),
 	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to store refresh token")
+		return
+	}
 
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"id":							user.ID,
@@ -177,7 +184,7 @@ func (cfg *apiConfig) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tokenRow, err := cfg.db.GetRefreshToken(r.Context(), refreshToken)
-	if err != nil || tokenRow.RevokedAt != nil || tokenRow.ExpiresAt.Before(time.Now()) {
+	if err != nil || !tokenRow.RevokedAt.Valid && tokenRow.ExpiresAt.Before(time.Now()) {
 		respondWithError(w, http.StatusUnauthorized, "refresh token expired or revoked")
 		return
 	}
@@ -204,7 +211,10 @@ func (cfg *apiConfig) handleRevoke(w http.ResponseWriter, r *http.Request) {
 
 	err = cfg.db.RevokeRefreshToken(r.Context(), database.RevokeRefreshTokenParams{
 		Token:     refreshToken,
-		RevokedAt: time.Now(),
+		RevokedAt: sql.NullTime{
+			Time:		time.Now(),
+			Valid:	true,
+		},
 		UpdatedAt: time.Now(),
 	})
 	if err != nil {
