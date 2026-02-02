@@ -4,6 +4,8 @@ import (
 	"time"
 	"errors"
 	"net/http"
+	"crypto/rand"
+	"encoding/hex"
 	"strings"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -63,4 +65,12 @@ func GetBearerToken(headers http.Header) (string, error) {
 		return "", errors.New("token missing")
 	}
 	return token, nil
+}
+
+func MakeRefreshToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }

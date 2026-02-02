@@ -142,13 +142,77 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]interface{}{
-		"id":					user.ID,
-		"email":			user.Email,
-		"created_at":	user.CreatedAt,
-		"updated_at":	user.UpdatedAt,
-		"token":			token,
+	refreshToken, err := auth.MakeRefreshToken()
+
+	_, err = cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
+		Token:		refreshToken,
+		UserID:		user.ID,
+		ExpiresAt:	time.Now().Add(60 * 24 * time.Hour),
 	})
+
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"id":							user.ID,
+		"email":					user.Email,
+		"created_at":			user.CreatedAt,
+		"updated_at":			user.UpdatedAt,
+		"token":					token,
+		"refresh_token":	refreshToken,
+	})
+}
+
+func (cfg *apiConfig) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "missing refresh token")
+		return
+	}
+	user, err := cfg.db.GetUserFromRefreshToken(r.Context(), refreshToken)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid refresh token")
+		return
+	}
+
+	tokenRow, err := cfg.db.GetRefreshToken(r.Context(), refreshToken)
+	if err != nil || tokenRow.RevokedAt != nil || tokenRow.ExpiresAt.Before(time.Now()) {
+		respondWithError(w, http.StatusUnauthorized, "refresh token expired or revoked")
+		return
+	}
+
+	newToken, err := auth.MakeJWT(user.ID, cfg.jwtSecret, time.Hour)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "could not create access token")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, map[string]string{"token": newToken})
+}
+
+func (cfg *apiConfig) handleRevoke(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "missing refresh token")
+		return
+	}
+
+	err = cfg.db.RevokeRefreshToken(r.Context(), database.RevokeRefreshTokenParams{
+		Token:     refreshToken,
+		RevokedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to revoke token")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent) // 204
 }
 
 func (cfg *apiConfig) handleChirps(w http.ResponseWriter, r *http.Request) {
@@ -288,6 +352,9 @@ func main() {
 	mux.HandleFunc("/api/login", cfg.handleLogin)
 	mux.HandleFunc("/api/chirps", cfg.handleChirps)
 	mux.HandleFunc("/api/chirps/", cfg.handleChirpByID)
+	mux.HandleFunc("/api/refresh", cfg.handleRefresh)
+	mux.HandleFunc("/api/revoke", cfg.handleRevoke)
+
 
 	// Health & admin
 	mux.HandleFunc("/api/healthz", func(w http.ResponseWriter, r *http.Request) {
