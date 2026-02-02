@@ -351,11 +351,6 @@ func (cfg *apiConfig) handleChirps(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handleChirpByID(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/chirps/")
 	chirpID, err := uuid.Parse(idStr)
 	if err != nil {
@@ -363,23 +358,63 @@ func (cfg *apiConfig) handleChirpByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chirp, err := cfg.db.GetChirp(r.Context(), chirpID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			respondWithError(w, http.StatusNotFound, "chirp not found")
+	switch r.Method {
+	case http.MethodGet:
+		chirp, err := cfg.db.GetChirp(r.Context(), chirpID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				respondWithError(w, http.StatusNotFound, "chirp not found")
+				return
+			}
+			respondWithError(w, http.StatusInternalServerError, "failed to fetch chirp")
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "failed to fetch chirp")
+
+		respondWithJSON(w, http.StatusOK, Chirp{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserID:    chirp.UserID,
+		})
+
+	case http.MethodDelete:
+		tokenString, err := auth.GetBearerToken(r.Header)
+		if err != nil {
+			respondWithError(w, http.StatusUnauthorized, "missing or invalid token")
+			return
+		}
+		userID, err := auth.ValidateJWT(tokenString, cfg.jwtSecret)
+		if err != nil {
+			respondWithError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+		chirp, err := cfg.db.GetChirp(r.Context(), chirpID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				respondWithError(w, http.StatusNotFound, "chirp not found")
+				return
+			}
+			respondWithError(w, http.StatusInternalServerError, "failed to fetch chirp")
+			return
+		}
+		
+		if chirp.UserID != userID {
+			respondWithError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+
+		if err := cfg.db.DeleteChirp(r.Context(), chirpID); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "failed to delete chirp")
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-
-	respondWithJSON(w, http.StatusOK, Chirp{
-		ID:        chirp.ID,
-		CreatedAt: chirp.CreatedAt,
-		UpdatedAt: chirp.UpdatedAt,
-		Body:      chirp.Body,
-		UserID:    chirp.UserID,
-	})
 }
 
 // --- Main ---
