@@ -64,6 +64,10 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 // --- Handlers ---
 
 func (cfg *apiConfig) handleUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPut {
+		cfg.handleUpdateUser(w, r)
+		return
+	}
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -405,7 +409,6 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/users", cfg.handleUsers)
-	mux.HandleFunc("/api/users", cfg.handleUpdateUser)
 	mux.HandleFunc("/api/login", cfg.handleLogin)
 	mux.HandleFunc("/api/chirps", cfg.handleChirps)
 	mux.HandleFunc("/api/chirps/", cfg.handleChirpByID)
