@@ -3,6 +3,7 @@ package auth
 import (
 	"testing"
 	"time"
+	"net/http"	
 	"github.com/google/uuid"
 )
 
@@ -47,5 +48,17 @@ func TestJWTWrongSecret(t *testing.T) {
 	_, err = ValidateJWT(token, "wrong-secret")
 	if err == nil {
 		t.Fatalf("expected error for wrong secret")
+	}
+}
+
+func TestGetBearerToken(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("Authorization", "Bearer abc123")
+	token, err := GetBearerToken(headers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "abc123" {
+		t.Fatalf("expected abc123, got %s", token)
 	}
 }
