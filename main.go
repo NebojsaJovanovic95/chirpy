@@ -103,6 +103,52 @@ func (cfg *apiConfig) handleUsers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (cfg *apiConfig) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	tokenString, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "missing or invalid token")
+		return
+	}
+	userID, err := auth.ValidateJWT(tokenString, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	defer r.Body.Close()
+	var req struct{
+		Email			string `json:"email"`
+		Password	string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	hashedPassword, err := auth.HashPassword(req.Password)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+	user, err := cfg.db.UpdateUser(r.Context(), database.UpdateUserParams{
+		ID:						userID,
+		Email:				req.Email,
+		HashedPassword:	hashedPassword,
+	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to update user")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"id":					user.ID,
+		"email":			user.Email,
+		"created_at":	user.CreatedAt,
+		"updated_at":	user.UpdatedAt,
+	})
+}
+
 func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -359,6 +405,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/users", cfg.handleUsers)
+	mux.HandleFunc("/api/users", cfg.handleUpdateUser)
 	mux.HandleFunc("/api/login", cfg.handleLogin)
 	mux.HandleFunc("/api/chirps", cfg.handleChirps)
 	mux.HandleFunc("/api/chirps/", cfg.handleChirpByID)

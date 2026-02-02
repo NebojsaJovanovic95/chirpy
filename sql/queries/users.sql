@@ -26,3 +26,12 @@ RETURNING id, created_at, updated_at, email;
 
 -- name: DeleteAllUsers :exec
 DELETE FROM users;
+
+-- name: UpdateUser :one
+UPDATE users
+SET email = $2,
+    hashed_password = $3,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, email, created_at, updated_at;
+
