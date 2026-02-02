@@ -30,7 +30,7 @@ func TestExpiredJWT(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MakeJWT failed: %v", err)
 	}
-	_, err := ValidateJWT(token, secret)
+	_, err = ValidateJWT(token, secret)
 	if err == nil {
 		t.Fatalf("expected error for expired token")
 	}
@@ -45,7 +45,7 @@ func TestJWTWrongSecret(t *testing.T) {
 	}
 
 	_, err = ValidateJWT(token, "wrong-secret")
-	iff err == nil {
+	if err == nil {
 		t.Fatalf("expected error for wrong secret")
 	}
 }

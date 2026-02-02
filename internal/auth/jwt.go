@@ -2,40 +2,47 @@ package auth
 
 import (
 	"time"
-	"github.com/google/uuid"
+
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (string, error) {
-	// make the jwt string and throw error if failed
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &jwt.RegisteredClaims{
-		Issuer: "chirpy",
-		IssuedAt: jwt.NewNumericDate(time.Now()),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiresIn)),
-		Subject: userID.String(),
-	})
-	ss, err := token.SignedString([]byte(tokenSecret))
-	return ss, err
+	now := time.Now().UTC()
+
+	claims := jwt.RegisteredClaims{
+		Issuer:    "chirpy",
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(expiresIn)),
+		Subject:   userID.String(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	return token.SignedString([]byte(tokenSecret))
 }
 
 func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	claims := &jwt.RegisteredClaims{}
-	token, err := jwt.ParseWithClaims(
+
+	_, err := jwt.ParseWithClaims(
 		tokenString,
 		claims,
-		func(token *jwt.Token)(interface{}, error) {
-			return []byte(tokenString), nil
+		func(token *jwt.Token) (interface{}, error) {
+			return []byte(tokenSecret), nil
 		},
+		jwt.WithValidMethods([]string{
+			jwt.SigningMethodHS256.Alg(),
+		}),
 	)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	if !token.Valid {
-		return uuid.Nil, jwt.ErrTokenInvalidClaims
-	}
+
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil {
 		return uuid.Nil, err
 	}
+
 	return userID, nil
 }
