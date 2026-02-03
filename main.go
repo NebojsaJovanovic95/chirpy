@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -377,6 +378,11 @@ func (cfg *apiConfig) handleChirps(w http.ResponseWriter, r *http.Request) {
 		})
 	case http.MethodGet:
 		authorIDStr := r.URL.Query().Get("author_id")
+		sortOrder := r.URL.Query().Get("sort")
+		if sortOrder == "" {
+			sortOrder = "asc"
+		}
+
 		var chirps []database.Chirp
 		var err error
 		
@@ -395,6 +401,16 @@ func (cfg *apiConfig) handleChirps(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusInternalServerError, "failed to fetch chirps")
 			return
 		}
+
+		sort.Slice(
+			chirps,
+			func(i, j int) bool {
+				if sortOrder == "desc" {
+					return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+				}
+				return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
+			})
+
 		result := make([]Chirp, 0, len(chirps))
 		for _, c := range chirps {
 			result = append(result, Chirp{
