@@ -24,6 +24,7 @@ type apiConfig struct {
 	db							*database.Queries
 	platform				string
 	jwtSecret				string
+	polkaKey				string
 }
 
 type loginRequest struct {
@@ -66,6 +67,12 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 func (cfg *apiConfig) handlePolkaWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil || apiKey != cfg.polkaKey {
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	
@@ -467,6 +474,10 @@ func main() {
 	if jwtSecret == "" {
 		log.Fatal("JWT_SECRET not set")
 	}
+	polkaKey := os.Getenv("POLKA_KEY")
+	if polkaKey == "" {
+		log.Fatal("POLKA_KEY not set")
+	}
 	dbURL := os.Getenv("DB_URL")
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -479,6 +490,7 @@ func main() {
 		db:					dbQueries,
 		platform:		os.Getenv("PLATFORM"),
 		jwtSecret:	jwtSecret,
+		polkaKey:		polkaKey,
 	}
 
 	mux := http.NewServeMux()
