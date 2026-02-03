@@ -35,3 +35,7 @@ SET email = $2,
 WHERE id = $1
 RETURNING id, email, created_at, updated_at;
 
+-- name: UpgradeUserToChirpyRed :exec
+UPDATE users
+SET is_chirpy_red = TRUE, updated_at = NOW()
+WHERE id = $1;
