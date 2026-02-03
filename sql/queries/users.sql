@@ -9,7 +9,7 @@ VALUES (
 RETURNING *;
 
 -- name: GetUserByEmail :one
-SELECT id, email, created_at, updated_at, hashed_password
+SELECT id, email, created_at, updated_at, hashed_password, is_chirpy_red
 FROM users
 WHERE email = $1;
 
@@ -22,7 +22,7 @@ VALUES (
     $1,
     $2
 )
-RETURNING id, created_at, updated_at, email;
+RETURNING id, created_at, updated_at, email, is_chirpy_red;
 
 -- name: DeleteAllUsers :exec
 DELETE FROM users;
@@ -33,7 +33,7 @@ SET email = $2,
     hashed_password = $3,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, email, created_at, updated_at;
+RETURNING id, email, created_at, updated_at, is_chirpy_red;
 
 -- name: UpgradeUserToChirpyRed :exec
 UPDATE users

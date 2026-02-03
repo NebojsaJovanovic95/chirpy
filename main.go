@@ -63,6 +63,43 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 
 // --- Handlers ---
 
+func (cfg *apiConfig) handlePolkaWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	
+	defer r.Body.Close()
+
+	var payload struct {
+		Event string `json:"event"`
+		Data struct {
+			UserID uuid.UUID `json:"user_id"`
+		} `json:"data"`
+	}
+
+	if err :=  json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	
+	if payload.Event != "user.upgraded" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if err := cfg.db.UpgradeUserToChirpyRed(r.Context(), payload.Data.UserID); err != nil {
+		if err == sql.ErrNoRows {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (cfg *apiConfig) handleUsers(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPut {
 		cfg.handleUpdateUser(w, r)
@@ -104,6 +141,7 @@ func (cfg *apiConfig) handleUsers(w http.ResponseWriter, r *http.Request) {
 		"email":      user.Email,
 		"created_at": user.CreatedAt,
 		"updated_at": user.UpdatedAt,
+		"is_chirpy_red": user.IsChirpyRed,
 	})
 }
 
@@ -150,6 +188,7 @@ func (cfg *apiConfig) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		"email":			user.Email,
 		"created_at":	user.CreatedAt,
 		"updated_at":	user.UpdatedAt,
+		"is_chirpy_red": user.IsChirpyRed,
 	})
 }
 
@@ -212,6 +251,7 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"email":					user.Email,
 		"created_at":			user.CreatedAt,
 		"updated_at":			user.UpdatedAt,
+		"is_chirpy_red": user.IsChirpyRed,
 		"token":					token,
 		"refresh_token":	refreshToken,
 	})
@@ -443,6 +483,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("/api/polka/webhooks", cfg.handlePolkaWebhook)
 	mux.HandleFunc("/api/users", cfg.handleUsers)
 	mux.HandleFunc("/api/login", cfg.handleLogin)
 	mux.HandleFunc("/api/chirps", cfg.handleChirps)
