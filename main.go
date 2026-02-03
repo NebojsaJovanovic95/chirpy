@@ -376,7 +376,21 @@ func (cfg *apiConfig) handleChirps(w http.ResponseWriter, r *http.Request) {
 			UserID:    chirp.UserID,
 		})
 	case http.MethodGet:
-		chirps, err := cfg.db.GetChirps(r.Context())
+		authorIDStr := r.URL.Query().Get("author_id")
+		var chirps []database.Chirp
+		var err error
+		
+		if authorIDStr == "" {
+			chirps, err = cfg.db.GetChirps(r.Context())
+		} else {
+			authorID, parseErr := uuid.Parse(authorIDStr)
+			if parseErr != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			chirps, err = cfg.db.GetChirpsByAuthor(r.Context(), authorID)
+		}
+
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "failed to fetch chirps")
 			return
